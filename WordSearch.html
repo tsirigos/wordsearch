@@ -4,60 +4,476 @@
   <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
   <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <title>Word Search Solver</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    textarea { width: 400px; height: 200px; }
-    input { margin-top: 10px; padding: 5px; }
-    button { margin: 10px 0; padding: 6px 12px; }
-    table { border-collapse: collapse; margin-top: 20px; }
-    td {
-      width: 25px; height: 25px;
-      text-align: center;
-      border: 1px solid #ddd;
-      font-weight: bold;
-      font-size: 14px;
+    * {
+      box-sizing: border-box;
     }
-    .highlight { background-color: yellow; }
-    pre { background: #f4f4f4; padding: 10px; }
+    
+    body {
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      padding: 30px 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      color: #333;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      text-align: center;
+      color: white;
+      font-size: 3em;
+      font-weight: 700;
+      margin-bottom: 10px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+      letter-spacing: -1px;
+    }
+    
+    h2 {
+      color: #4a5568;
+      font-weight: 600;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      font-size: 1.8em;
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 10px;
+    }
+    
+    h3 {
+      color: #4a5568;
+      font-weight: 600;
+      margin-top: 25px;
+      margin-bottom: 10px;
+      font-size: 1.3em;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      margin-bottom: 25px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 50px rgba(0,0,0,0.2);
+    }
+    
+    p {
+      color: #718096;
+      margin-bottom: 15px;
+      line-height: 1.6;
+    }
+    
+    textarea {
+      width: 100%;
+      max-width: 600px;
+      height: 200px;
+      padding: 15px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      resize: vertical;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+      background: #f7fafc;
+    }
+    
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      background: white;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      max-width: 400px;
+      padding: 15px 20px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      font-size: 16px;
+      font-family: 'Poppins', sans-serif;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+      background: #f7fafc;
+    }
+    
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      background: white;
+    }
+    
+    input[type="file"] {
+      padding: 12px;
+      border: 2px dashed #cbd5e0;
+      border-radius: 12px;
+      background: #f7fafc;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-family: 'Poppins', sans-serif;
+      margin-bottom: 15px;
+    }
+    
+    input[type="file"]:hover {
+      border-color: #667eea;
+      background: white;
+    }
+    
+    button {
+      margin: 8px 8px 8px 0;
+      padding: 14px 28px;
+      border: none;
+      border-radius: 12px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      letter-spacing: 0.5px;
+    }
+    
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    #ocrStatus {
+      display: inline-block;
+      margin-left: 15px;
+      padding: 10px 15px;
+      background: #edf2f7;
+      border-radius: 8px;
+      color: #4a5568;
+      font-weight: 500;
+    }
+    
+    table {
+      border-collapse: separate;
+      border-spacing: 3px;
+      margin: 25px auto;
+      background: #f7fafc;
+      padding: 10px;
+      border-radius: 15px;
+      box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    td {
+      width: 32px;
+      height: 32px;
+      text-align: center;
+      border: none;
+      font-weight: 600;
+      font-size: 15px;
+      background: white;
+      border-radius: 8px;
+      color: #2d3748;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    td:hover {
+      transform: scale(1.1);
+      z-index: 10;
+      position: relative;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .highlight {
+      background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+      color: #1a202c;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4) !important;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+      }
+    }
+    
+    pre {
+      background: #1a202c;
+      color: #e2e8f0;
+      padding: 20px;
+      border-radius: 12px;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      border: 1px solid #2d3748;
+    }
+    
+    #gridDisplay {
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    #segmentationResult {
+      background: white;
+      border-radius: 15px;
+      padding: 25px;
+      margin-top: 20px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    }
+    
+    #segmentationResult canvas {
+      max-width: 100%;
+      height: auto;
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    #verificationUI {
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3) !important;
+      border: none !important;
+    }
+    
+    #verificationUI h3 {
+      color: #667eea;
+      margin-top: 0;
+      border-bottom: none;
+    }
+    
+    #letterCanvas {
+      border-radius: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    #charInput {
+      border-radius: 10px;
+      border: 2px solid #667eea !important;
+    }
+    
+    #confirmBtn {
+      background: linear-gradient(135deg, #48bb78 0%, #38a169 100%) !important;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 10px;
+    }
+    
+    .search-section {
+      display: flex;
+      gap: 15px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+    
+    .collapsible-header {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .collapsible-header:hover {
+      color: #667eea;
+    }
+    
+    .collapsible-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+      opacity: 0;
+    }
+    
+    .collapsible-content.expanded {
+      max-height: 500px;
+      opacity: 1;
+      transition: max-height 0.3s ease-in, opacity 0.3s ease-in;
+    }
+    
+    .toggle-icon {
+      display: inline-block;
+      transition: transform 0.3s ease;
+      margin-left: 10px;
+      font-size: 0.8em;
+    }
+    
+    .collapsible-header.expanded .toggle-icon {
+      transform: rotate(90deg);
+    }
+    
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2em;
+      }
+      
+      .card {
+        padding: 20px;
+      }
+      
+      button {
+        width: 100%;
+        margin: 5px 0;
+      }
+      
+      input[type="text"] {
+        width: 100%;
+      }
+      
+      textarea {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
   <!-- Audio element for the "found" sound effect -->
-  <audio id="foundSound" src="https://www.soundjay.com/buttons/sounds/button-3.mp3" preload="auto"></audio>
+  <!-- Funny sound effect when word is found - uses a fun victory/achievement sound -->
+  <audio id="foundSound" preload="auto">
+    <!-- Fun victory fanfare sound from Mixkit (reliable free sound library) -->
+    <source src="https://assets.mixkit.co/active_storage/sfx/2690/2690-preview.mp3" type="audio/mpeg">
+    <!-- Fallback: Achievement unlocked sound -->
+    <source src="https://assets.mixkit.co/active_storage/sfx/2695/2695-preview.mp3" type="audio/mpeg">
+    <!-- Another fallback: Fun game sound -->
+    <source src="https://assets.mixkit.co/active_storage/sfx/2225/2225-preview.mp3" type="audio/mpeg">
+  </audio>
 
-  <h1>Word Search Solver</h1>
+  <div class="container">
+    <h1>Word Search Solver</h1>
 
-  <h3>Option 1: Paste Grid Text</h3>
-  <p>Paste your grid below (one row per line, no spaces).</p>
-  <textarea id="gridInput"></textarea><br>
+    <div class="card">
+      <h3>Option 1: Paste Grid Text</h3>
+      <p>Paste your grid below (one row per line, no spaces).</p>
+      <textarea id="gridInput"></textarea>
+    </div>
 
-  <h3>Option 2: Upload Grid Image</h3>
-  <p>Or, upload a clear photo of the grid.</p>
-  <input type="file" id="imageUpload" accept="image/*"> <button onclick="processImage('diagnosis')">Diagnosis</button> <button onclick="processImage('full')">Process Image</button> <span id="ocrStatus"></span><br>
+    <div class="card">
+      <h3 class="collapsible-header" id="option2Header" onclick="toggleOption2()">
+        Option 2: Upload Grid Image
+        <span class="toggle-icon">▶</span>
+      </h3>
+      <div class="collapsible-content" id="option2Content">
+        <p>Or, upload a clear photo of the grid.</p>
+        <input type="file" id="imageUpload" accept="image/*">
+        <div style="margin-top: 10px;">
+          <button onclick="processImage('diagnosis')">Diagnosis</button>
+          <button onclick="processImage('full')">Process Image</button>
+          <span id="ocrStatus"></span>
+        </div>
+      </div>
+    </div>
 
-  <input type="text" id="wordInput" placeholder="Enter word">
-  <button onclick="runSearch()">Search</button>
+    <div class="card">
+      <h3>Search for a Word</h3>
+      <div class="search-section">
+        <input type="text" id="wordInput" placeholder="Enter word to search">
+        <button onclick="runSearch()">🔍 Search</button>
+      </div>
+    </div>
 
-  <div id="segmentationResult" style="display:none;">
-    <h2>Segmentation Result:</h2>
-    <canvas id="outputCanvas"></canvas>
+    <div id="segmentationResult" style="display:none;">
+      <h2>Segmentation Result:</h2>
+      <canvas id="outputCanvas"></canvas>
+    </div>
+
+    <div id="verificationUI" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 30px; z-index: 100; text-align: center;">
+        <h3>Verify Recognition</h3>
+        <canvas id="letterCanvas" style="border: 1px solid #ccc; width: 100px; height: 100px; image-rendering: pixelated;"></canvas>
+        <p>Recognized Letter:</p>
+        <input type="text" id="charInput" maxlength="1" size="2" style="font-size: 2em; text-align: center; color: #667eea; border: 2px solid #667eea; width: 50px; border-radius: 8px; padding: 5px;">
+        <button id="confirmBtn" style="font-size: 1.5em; margin-left: 10px; vertical-align: middle;">✓</button>
+    </div>
+
+    <div class="card">
+      <h2>Word Search Grid</h2>
+      <div id="gridDisplay"></div>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <pre id="results"></pre>
+    </div>
   </div>
-
-  <div id="verificationUI" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 2px solid #333; background: #fff; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index: 100; text-align: center;">
-      <h3>Verify Recognition</h3>
-      <canvas id="letterCanvas" style="border: 1px solid #ccc; width: 100px; height: 100px; image-rendering: pixelated;"></canvas>
-      <p>Recognized Letter:</p>
-      <input type="text" id="charInput" maxlength="1" size="2" style="font-size: 2em; text-align: center; color: #d9534f; border: 2px solid #d9534f; width: 50px;">
-      <button id="confirmBtn" style="font-size: 1.5em; margin-left: 10px; vertical-align: middle;">✓</button>
-  </div>
-  <h2>Word Search Grid:</h2>
-  <div id="gridDisplay"></div>
-
-  <h2>Results:</h2>
-  <pre id="results"></pre>
 
   <script>
+    function toggleOption2() {
+      const content = document.getElementById('option2Content');
+      const header = document.getElementById('option2Header');
+      content.classList.toggle('expanded');
+      header.classList.toggle('expanded');
+    }
+
+    // Play a cheerful ascending chord pattern when word is found
+    function playFunnySound() {
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioContext.currentTime;
+        
+        // Create a cheerful ascending major chord progression (C - E - G - C)
+        const notes = [
+          { freq: 523.25, time: 0 },    // C5
+          { freq: 659.25, time: 0.08 }, // E5
+          { freq: 783.99, time: 0.16 }, // G5
+          { freq: 1046.50, time: 0.24 } // C6 (higher octave)
+        ];
+        
+        notes.forEach(note => {
+          const oscillator = audioContext.createOscillator();
+          const gainNode = audioContext.createGain();
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContext.destination);
+          
+          oscillator.type = 'sine';
+          oscillator.frequency.value = note.freq;
+          
+          // Envelope: quick attack, gentle decay
+          const startTime = now + note.time;
+          const endTime = startTime + 0.3;
+          
+          gainNode.gain.setValueAtTime(0, startTime);
+          gainNode.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, endTime);
+          
+          oscillator.start(startTime);
+          oscillator.stop(endTime);
+        });
+      } catch (e) {
+        console.log("Web Audio API not supported:", e);
+      }
+    }
+
     // Preload your Spanish grid
     const initialGrid = [
       "CSDJSOMALLEMYJDSCDZ",
@@ -108,20 +524,22 @@
       const word = document.getElementById("wordInput").value.toUpperCase();
       const matches = findWordComplete(grid, word);
 
-      // Highlight first match (or all if you want)
+      // Highlight all matches
       let highlights = [];
       if (matches.length > 0) {
-        // Play a sound when a word is found
-        document.getElementById("foundSound").play();
+        // Play a funny sound when a word is found
+        playFunnySound();
 
-        const m = matches[0]; // highlight the first one
+        // Highlight all matches
         const drdc = { H:[0,1], V:[1,0], D1:[1,1], D2:[1,-1] };
-        const [dr, dc] = drdc[m.dir];
-        const w = m.reversed ? word.split("").reverse().join("") : word;
-        for (let i=0; i<w.length; i++) {
-          const r = m.row-1 + dr*i;
-          const c = m.col-1 + dc*i;
-          highlights.push({r, c});
+        for (const m of matches) {
+          const [dr, dc] = drdc[m.dir];
+          const w = m.reversed ? word.split("").reverse().join("") : word;
+          for (let i=0; i<w.length; i++) {
+            const r = m.row-1 + dr*i;
+            const c = m.col-1 + dc*i;
+            highlights.push({r, c});
+          }
         }
       }
 
