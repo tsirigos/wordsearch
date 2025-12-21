@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+  <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+  <meta charset="UTF-8">
+  <title>Word Search Solver</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    textarea { width: 400px; height: 200px; }
+    input { margin-top: 10px; padding: 5px; }
+    button { margin: 10px 0; padding: 6px 12px; }
+    table { border-collapse: collapse; margin-top: 20px; }
+    td {
+      width: 25px; height: 25px;
+      text-align: center;
+      border: 1px solid #ddd;
+      font-weight: bold;
+      font-size: 14px;
+    }
+    .highlight { background-color: yellow; }
+    pre { background: #f4f4f4; padding: 10px; }
+  </style>
+</head>
+<body>
+  <!-- Audio element for the "found" sound effect -->
+  <audio id="foundSound" src="https://www.soundjay.com/buttons/sounds/button-3.mp3" preload="auto"></audio>
+
+  <h1>Word Search Solver</h1>
+
+  <h3>Option 1: Paste Grid Text</h3>
+  <p>Paste your grid below (one row per line, no spaces).</p>
+  <textarea id="gridInput"></textarea><br>
+
+  <h3>Option 2: Upload Grid Image</h3>
+  <p>Or, upload a clear photo of the grid.</p>
+  <input type="file" id="imageUpload" accept="image/*"> <button onclick="processImage('diagnosis')">Diagnosis</button> <button onclick="processImage('full')">Process Image</button> <span id="ocrStatus"></span><br>
+
+  <input type="text" id="wordInput" placeholder="Enter word">
+  <button onclick="runSearch()">Search</button>
+
+  <div id="segmentationResult" style="display:none;">
+    <h2>Segmentation Result:</h2>
+    <canvas id="outputCanvas"></canvas>
+  </div>
+
+  <div id="verificationUI" style="display:none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); border: 2px solid #333; background: #fff; padding: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index: 100; text-align: center;">
+      <h3>Verify Recognition</h3>
+      <canvas id="letterCanvas" style="border: 1px solid #ccc; width: 100px; height: 100px; image-rendering: pixelated;"></canvas>
+      <p>Recognized Letter:</p>
+      <input type="text" id="charInput" maxlength="1" size="2" style="font-size: 2em; text-align: center; color: #d9534f; border: 2px solid #d9534f; width: 50px;">
+      <button id="confirmBtn" style="font-size: 1.5em; margin-left: 10px; vertical-align: middle;">✓</button>
+  </div>
+  <h2>Word Search Grid:</h2>
+  <div id="gridDisplay"></div>
+
+  <h2>Results:</h2>
+  <pre id="results"></pre>
+
+  <script>
+    // Preload your Spanish grid
+    const initialGrid = [
+      "CSDJSOMALLEMYJDSCDZ",
+      "MOEEIALGJTETCCEAHEY",
+      "EEMHDRIOYFUOPODMATZ",
+      "KSROCOBDEDMTGCOAOSO",
+      "PTTPSONTSOEEOBNLDUT",
+      "BLYOEENDEOURCADLHYS",
+      "BAADYOLSELNLKCEEAAU",
+      "JGYTFBTLAEBEBPETSNG",
+      "HOZPEAITANRKUBSOTOO",
+      "SOLUUUSECMEEMBUMASH",
+      "WQLSKAQDNGAUSSSOPVC",
+      "BBTAHADIOSKUBZTCREU",
+      "SEDRATSANEUBSGELOMM",
+      "DELGUSTOESMIOTDHNOF",
+      "GANANAMATSAHUMEETSW",
+      "RZOJGCOMOESTASCDOWT"
+    ];
+
+    document.getElementById("gridInput").value = initialGrid.join("\n");
+
+    function displayGrid(grid, highlights=[]) {
+      const div = document.getElementById("gridDisplay");
+      div.innerHTML = "";
+      const table = document.createElement("table");
+
+      const highlightSet = new Set(highlights.map(h => h.r + "," + h.c));
+
+      for (let r = 0; r < grid.length; r++) {
+        const row = document.createElement("tr");
+        for (let c = 0; c < grid[0].length; c++) {
+          const cell = document.createElement("td");
+          cell.textContent = grid[r][c];
+          if (highlightSet.has(r + "," + c)) {
+            cell.classList.add("highlight");
+          }
+          row.appendChild(cell);
+        }
+        table.appendChild(row);
+      }
+      div.appendChild(table);
+    }
+
+    function runSearch() {
+      const grid = document.getElementById("gridInput").value
+                    .trim().split("\n").map(r => r.trim().toUpperCase());
+      const word = document.getElementById("wordInput").value.toUpperCase();
+      const matches = findWordComplete(grid, word);
+
+      // Highlight first match (or all if you want)
+      let highlights = [];
+      if (matches.length > 0) {
+        // Play a sound when a word is found
+        document.getElementById("foundSound").play();
+
+        const m = matches[0]; // highlight the first one
+        const drdc = { H:[0,1], V:[1,0], D1:[1,1], D2:[1,-1] };
+        const [dr, dc] = drdc[m.dir];
+        const w = m.reversed ? word.split("").reverse().join("") : word;
+        for (let i=0; i<w.length; i++) {
+          const r = m.row-1 + dr*i;
+          const c = m.col-1 + dc*i;
+          highlights.push({r, c});
+        }
+      }
+
+      displayGrid(grid, highlights);
+      document.getElementById("results").textContent = JSON.stringify(matches, null, 2);
+    }
+
+    function findWordComplete(grid, word) {
+      const nRows = grid.length;
+      const nCols = grid[0].length;
+      const matches = [];
+      const directions = [
+        [0, 1, "H"], [1, 0, "V"], [1, 1, "D1"], [1, -1, "D2"]
+      ];
+
+      function inBounds(r, c) {
+        return r >= 0 && r < nRows && c >= 0 && c < nCols;
+      }
+
+      function checkDirection(r, c, dr, dc, w) {
+        for (let i = 0; i < w.length; i++) {
+          const nr = r + dr * i, nc = c + dc * i;
+          if (!inBounds(nr, nc) || grid[nr][nc] !== w[i]) return false;
+        }
+        return true;
+      }
+
+      for (let r = 0; r < nRows; r++) {
+        for (let c = 0; c < nCols; c++) {
+          for (const [dr, dc, label] of directions) {
+            if (checkDirection(r, c, dr, dc, word)) {
+              matches.push({ row: r+1, col: c+1, dir: label, reversed: false });
+            }
+            if (checkDirection(r, c, dr, dc, word.split("").reverse().join(""))) {
+              matches.push({ row: r+1, col: c+1, dir: label, reversed: true });
+            }
+          }
+        }
+      }
+      return matches;
+    }
+
+    async function processImage(mode = 'full') {
+      const fileInput = document.getElementById('imageUpload');
+      const statusEl = document.getElementById('ocrStatus');
+
+      if (fileInput.files.length === 0) {
+        alert('Please select an image file first.');
+        return;
+      }
+
+      if (typeof cv === 'undefined') {
+          statusEl.textContent = 'OpenCV.js is still loading. Please wait a second and try again.';
+          return;
+      }
+
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+
+      reader.onload = async function(e) {
+        const img = new Image();
+        img.onload = async function() { try {
+          // --- OpenCV Processing ---
+          statusEl.textContent = 'Segmenting image...';
+          console.clear();
+          console.log("Starting image segmentation with OpenCV.js");
+
+          // Load image into OpenCV
+          let src = cv.imread(img);
+          let displayMat = src.clone(); // For drawing results
+          let gray = new cv.Mat();
+          cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
+
+          // Binarize the image
+          let thresh = new cv.Mat();
+          cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 12);
+
+          // Find contours
+          let contours = new cv.MatVector();
+          let hierarchy = new cv.Mat();
+          cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+          
+          // --- 1. Initial Broad-Phase Filtering ---
+          let candidateBoxes = [];
+          console.log(`Found ${contours.size()} initial contours.`);
+          for (let i = 0; i < contours.size(); ++i) {
+            let cnt = contours.get(i);
+            let rect = cv.boundingRect(cnt);
+            let area = rect.width * rect.height;
+            // Use a very loose filter initially to get all potential candidates
+            if (area > 25) { 
+              candidateBoxes.push(rect);
+            }
+            cnt.delete();
+          }
+          console.log(`Found ${candidateBoxes.length} candidates after initial area filter.`);
+
+          if (candidateBoxes.length === 0) {
+              statusEl.textContent = 'Segmentation failed: No letter candidates found.';
+              return;
+          }
+
+          // --- 2. Statistical Analysis to Find Average Letter Size ---
+          const widths = candidateBoxes.map(b => b.width).sort((a, b) => a - b);
+          const heights = candidateBoxes.map(b => b.height).sort((a, b) => a - b);
+          const medianWidth = widths[Math.floor(widths.length / 2)];
+          const medianHeight = heights[Math.floor(heights.length / 2)];
+          console.log(`(3) Estimated Letter Box Size: ${medianWidth}w x ${medianHeight}h`);
+
+          // --- 3. Outlier Rejection based on Statistics ---
+          const letterBoxes = [];
+          const widthTolerance = medianWidth * 0.5;
+          const heightTolerance = medianHeight * 0.5;
+
+          for (const box of candidateBoxes) {
+              const isGoodWidth = Math.abs(box.width - medianWidth) < widthTolerance;
+              const isGoodHeight = Math.abs(box.height - medianHeight) < heightTolerance;
+
+              if (isGoodWidth && isGoodHeight) {
+                  letterBoxes.push(box);
+              }
+          }
+          console.log(`Kept ${letterBoxes.length} letters after statistical filtering.`);
+
+          // --- 4. Infer Grid Structure from Filtered Letters ---
+          if (letterBoxes.length < 10) { // Need a reasonable number of letters to infer a grid
+              statusEl.textContent = `Segmentation failed: Not enough letters found (${letterBoxes.length}) to infer a grid.`;
+              return;
+          }
+
+          // Helper to cluster points (for finding row/column lines)
+          const cluster1D = (points, tolerance) => {
+              points.sort((a, b) => a - b);
+              if (points.length === 0) return [];
+              const clusters = [];
+              let currentCluster = [points[0]];
+              for (let i = 1; i < points.length; i++) {
+                  if (points[i] - currentCluster[currentCluster.length - 1] < tolerance) {
+                      currentCluster.push(points[i]);
+                  } else {
+                      clusters.push(currentCluster);
+                      currentCluster = [points[i]];
+                  }
+              }
+              clusters.push(currentCluster);
+              // Return an object with position and count for each cluster
+              return clusters.map(c => ({
+                  position: c.reduce((sum, val) => sum + val, 0) / c.length,
+                  count: c.length
+              }));
+          };
+
+          // Cluster the Y coordinates of box centers to find row lines
+          const yCenters = letterBoxes.map(b => b.y + b.height / 2);
+          let rowClusters = cluster1D(yCenters, medianHeight * 0.7);
+
+          // Cluster the X coordinates of box centers to find column lines
+          const xCenters = letterBoxes.map(b => b.x + b.width / 2);
+          let colClusters = cluster1D(xCenters, medianWidth * 0.7);
+          console.log(`Inferred ${rowClusters.length} rows and ${colClusters.length} columns before filtering.`);
+
+          // Filter out rows and columns that are not well-supported by anchor letters
+          const colSupportThreshold = Math.ceil(rowClusters.length * 0.25);
+          const rowSupportThreshold = Math.ceil(colClusters.length * 0.25);
+          console.log(`Filtering with thresholds: Row support >= ${rowSupportThreshold}, Col support >= ${colSupportThreshold}`);
+
+          const strongRowClusters = rowClusters.filter(c => c.count >= rowSupportThreshold);
+          const strongColClusters = colClusters.filter(c => c.count >= colSupportThreshold);
+
+          if (strongRowClusters.length < rowClusters.length || strongColClusters.length < colClusters.length) {
+              console.log(`Filtered down to ${strongRowClusters.length} rows and ${strongColClusters.length} columns.`);
+          }
+
+          let rowYPositions = strongRowClusters.map(c => c.position);
+          let colXPositions = strongColClusters.map(c => c.position);
+
+          // --- Finalization Step: Impute Missing Rows/Columns ---
+          const imputeMissingLines = (positions, expectedCount) => {
+              if (positions.length < 2 || positions.length >= expectedCount) {
+                  return positions; // Not enough data to impute or no imputation needed
+              }
+              const distances = [];
+              for (let i = 1; i < positions.length; i++) {
+                  distances.push(positions[i] - positions[i - 1]);
+              }
+              distances.sort((a, b) => a - b);
+              const medianStep = distances[Math.floor(distances.length / 2)];
+
+              const completedPositions = [positions[0]];
+              for (let i = 1; i < positions.length; i++) {
+                  const gap = positions[i] - positions[i-1];
+                  const missingLines = Math.round(gap / medianStep) - 1;
+                  if (missingLines > 0 && missingLines < 4) { // Add a sanity check
+                      console.log(`Imputing ${missingLines} line(s) in a gap of size ${gap.toFixed(2)}px (median step: ${medianStep.toFixed(2)}px)`);
+                      for (let j = 1; j <= missingLines; j++) {
+                          completedPositions.push(positions[i-1] + j * medianStep);
+                      }
+                  }
+                  completedPositions.push(positions[i]);
+              }
+              return completedPositions.sort((a, b) => a - b);
+          };
+
+          rowYPositions = imputeMissingLines(rowYPositions, rowClusters.length);
+          colXPositions = imputeMissingLines(colXPositions, colClusters.length);
+
+          // --- 5. Generate Ideal Grid and Draw It ---
+          // Use the number of inferred rows/columns directly from our clustering step.
+          const numCols = colXPositions.length;
+          const numRows = rowYPositions.length;
+          if (numCols === 0 || numRows === 0) {
+              statusEl.textContent = `Segmentation failed: Could not form a valid grid.`;
+              return;
+          }
+          console.log(`Reconstructing a final ${numCols}x${numRows} grid after imputation.`);
+
+          const idealGridBoxes = [];
+          // Use the specific positions of each inferred row and column line.
+          for (let r = 0; r < numRows; r++) {
+              for (let c = 0; c < numCols; c++) {
+                  const currentX = colXPositions[c];
+                  const currentY = rowYPositions[r];
+                  const idealBox = {
+                      x: Math.round(currentX - medianWidth / 2),
+                      y: Math.round(currentY - medianHeight / 2),
+                      width: medianWidth,
+                      height: medianHeight
+                  };
+                  idealGridBoxes.push(idealBox);
+              }
+          }
+
+          console.log(`Generated an ideal grid with ${idealGridBoxes.length} cells.`);
+
+          // --- DIAGNOSIS MODE ---
+          if (mode === 'diagnosis') {
+              statusEl.textContent = `Diagnosis complete. Found ${letterBoxes.length} anchor letters and inferred a ${numCols}x${numRows} grid.`;
+              console.log("Running in Diagnosis mode. Drawing anchor letters (red) and ideal grid centers (blue).");
+              
+              // Draw thick red boxes for anchor letters
+              for (const box of letterBoxes) {
+                  cv.rectangle(displayMat, new cv.Point(box.x, box.y), new cv.Point(box.x + box.width, box.y + box.height), [0, 0, 255, 255], 3);
+              }
+
+              // Draw blue dots for the center of each ideal grid cell
+              for (const box of idealGridBoxes) {
+                  const boxCenterX = box.x + box.width / 2;
+                  const boxCenterY = box.y + box.height / 2;
+                  cv.circle(displayMat, new cv.Point(Math.round(boxCenterX), Math.round(boxCenterY)), Math.round(Math.min(medianWidth, medianHeight) / 5), [255, 0, 0, 255], -1); // Blue in BGR
+              }
+
+              const outputCanvas = document.getElementById('outputCanvas');
+              cv.imshow(outputCanvas, displayMat);
+              document.getElementById('segmentationResult').style.display = 'block';
+              return; // Stop here for diagnosis
+          }
+
+          // Display the result
+          const outputCanvas = document.getElementById('outputCanvas');
+          cv.imshow(outputCanvas, displayMat);
+          document.getElementById('segmentationResult').style.display = 'block';
+          
+          statusEl.textContent = `Grid inference complete. Starting OCR...`;
+
+          // --- 6. INTERACTIVE OCR on each Inferred Grid Cell ---
+          const verificationUI = document.getElementById('verificationUI');
+          const letterCanvas = document.getElementById('letterCanvas');
+          const charInput = document.getElementById('charInput');
+          const gridInput = document.getElementById('gridInput');
+          const confirmBtn = document.getElementById('confirmBtn');
+
+          const worker = await Tesseract.createWorker('spa', 1, {
+              logger: m => console.log(m) // Optional: for detailed Tesseract logs
+          });
+          await worker.setParameters({
+              tessedit_pageseg_mode: Tesseract.PSM.SINGLE_CHAR,
+              tessedit_char_whitelist: 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZÁÉÍÓÚ'
+          });
+
+          let letterIndex = 0;
+          let recognizedChars = [];
+
+          const verifyNextLetter = async () => {
+              if (letterIndex >= idealGridBoxes.length) {
+                  // --- All letters processed, finalize the grid ---
+                  await worker.terminate();
+                  verificationUI.style.display = 'none';
+                  let finalGrid = [];
+                  for (let i = 0; i < numRows; i++) {
+                      finalGrid.push(recognizedChars.slice(i * numCols, (i + 1) * numCols).join(''));
+                  }
+                  gridInput.value = finalGrid.join('\n');
+                  displayGrid(finalGrid);
+                  statusEl.textContent = 'Ready to find words!';
+                  cv.imshow(outputCanvas, displayMat); // Show final visualization
+                  // Final cleanup
+                  src.delete(); gray.delete(); thresh.delete(); contours.delete(); hierarchy.delete(); displayMat.delete();
+                  return;
+              }
+
+              statusEl.textContent = `Verifying letter ${letterIndex + 1} of ${idealGridBoxes.length}...`;
+              confirmBtn.disabled = false;
+
+              const box = idealGridBoxes[letterIndex];
+              const r = Math.floor(letterIndex / numCols);
+              const c = letterIndex % numCols;
+
+              // Dynamically determine the size of the OCR box based on its neighbors
+              const hDist = (c < numCols - 1) ? (colXPositions[c+1] - colXPositions[c]) : ((c > 0) ? (colXPositions[c] - colXPositions[c-1]) : medianWidth);
+              const vDist = (r < numRows - 1) ? (rowYPositions[r+1] - rowYPositions[r]) : ((r > 0) ? (rowYPositions[r] - rowYPositions[r-1]) : medianHeight);
+
+              const boxWidth = Math.round(hDist * 0.95);
+              const boxHeight = Math.round(vDist * 0.95);
+
+              const boxCenterX = box.x + box.width / 2;
+              const boxCenterY = box.y + box.height / 2;
+              let ocrBox = { x: Math.round(boxCenterX - boxWidth / 2), y: Math.round(boxCenterY - boxHeight / 2), width: boxWidth, height: boxHeight };
+              ocrBox.x = Math.max(0, ocrBox.x); // Clamp to image bounds
+              ocrBox.y = Math.max(0, ocrBox.y);
+              if (ocrBox.x + ocrBox.width > src.cols) { ocrBox.width = src.cols - ocrBox.x; }
+              if (ocrBox.y + ocrBox.height > src.rows) { ocrBox.height = src.rows - ocrBox.y; }
+
+              if (ocrBox.width <= 0 || ocrBox.height <= 0) {
+                  recognizedChars.push('?');
+                  letterIndex++;
+                  verifyNextLetter();
+                  return;
+              }
+
+              // Get the clean ROI from the original image BEFORE drawing anything
+              let ocrRoi = src.roi(ocrBox);
+              cv.imshow(letterCanvas, ocrRoi);
+              ocrRoi.delete();
+
+              const { data: { text } } = await worker.recognize(letterCanvas);
+              let char = text.trim().toUpperCase()[0] || '?';
+
+              // Normalize accented characters to their base letter, but keep Ñ
+              const accentMap = { 'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U' };
+              if (accentMap[char]) {
+                  char = accentMap[char];
+              }
+
+              charInput.value = char;
+              verificationUI.style.display = 'block';
+              charInput.focus();
+              charInput.select();
+
+              const handleConfirmation = () => {
+                  const accentMap = { 'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U' };
+                  let finalChar = charInput.value.trim().toUpperCase()[0] || '?';
+                  if (accentMap[finalChar]) {
+                      finalChar = accentMap[finalChar];
+                  }
+
+                  cv.rectangle(displayMat, new cv.Point(ocrBox.x, ocrBox.y), new cv.Point(ocrBox.x + ocrBox.width, ocrBox.y + ocrBox.height), [0, 0, 255, 255], 2);
+                  cv.circle(displayMat, new cv.Point(Math.round(boxCenterX), Math.round(boxCenterY)), Math.round(Math.min(medianWidth, medianHeight) / 5), [255, 0, 0, 255], -1);
+                  cv.imshow(outputCanvas, displayMat); // Update the main canvas to show progress
+
+                  recognizedChars.push(finalChar);
+                  letterIndex++;
+                  verifyNextLetter();
+              };
+              confirmBtn.onclick = handleConfirmation;
+              charInput.onkeyup = (event) => {
+                  if (event.key === 'Enter') handleConfirmation();
+              };
+          };
+
+          // Start the interactive process
+          verifyNextLetter();
+
+        } catch (error) {
+            console.error("An error occurred during image processing:", error);
+            statusEl.textContent = 'Error during image processing. See console for details.';
+        }
+
+          // Cleanup OpenCV objects
+          src.delete(); gray.delete(); thresh.delete(); contours.delete(); hierarchy.delete(); displayMat.delete();
+        };
+        img.src = e.target.result;
+      };
+
+      statusEl.textContent = 'Loading image...';
+      reader.readAsDataURL(file);
+    }
+
+    // Show grid on load
+    displayGrid(initialGrid.map(r => r.toUpperCase()));
+
+    // Add event listener to run search on "Enter" key press
+    document.getElementById('wordInput').addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault(); // Prevent form submission if it were in a form
+            runSearch();
+        }
+    });
+  </script>
+</body>
+</html>
