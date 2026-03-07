@@ -1,7 +1,9 @@
 def find_word_complete(grid, word):
     """
     Find all complete matches of a word (or its reverse) in a 2D grid.
-    Returns a list of matches with (row, col, direction, is_reverse)
+    Allows up to one mismatch per match; wildcards " " and "-" match any letter.
+    Returns a list of matches: (row, col, direction, is_reverse, mismatch_index).
+    mismatch_index is -1 for exact match, or 0-based index of the mismatched letter.
     Directions: 'H' = horizontal, 'V' = vertical, 'D1' = diag top-left→bottom-right, 'D2' = diag top-right→bottom-left
     """
     n_rows = len(grid)
@@ -21,21 +23,28 @@ def find_word_complete(grid, word):
         return 0 <= r < n_rows and 0 <= c < n_cols
 
     def check_direction(r, c, dr, dc, word_seq):
+        mismatch_index = -1
         for i in range(len(word_seq)):
             nr, nc = r + dr * i, c + dc * i
-            if not in_bounds(nr, nc) or grid[nr][nc] != word_seq[i]:
-                return False
-        return True
+            cell = grid[nr][nc] if in_bounds(nr, nc) else None
+            if cell is None:
+                return None
+            if cell == word_seq[i] or cell in (' ', '-'):
+                continue
+            if mismatch_index >= 0:
+                return None
+            mismatch_index = i
+        return mismatch_index
 
     for r in range(n_rows):
         for c in range(n_cols):
             for dr, dc, label in directions:
-                # Check forward
-                if check_direction(r, c, dr, dc, word):
-                    matches.append((r, c, label, False))
-                # Check backward
-                if check_direction(r, c, dr, dc, word[::-1]):
-                    matches.append((r, c, label, True))
+                res = check_direction(r, c, dr, dc, word)
+                if res is not None:
+                    matches.append((r, c, label, False, res))
+                res = check_direction(r, c, dr, dc, word[::-1])
+                if res is not None:
+                    matches.append((r, c, label, True, res))
     return matches
 
 # Example usage:
@@ -64,5 +73,6 @@ matches = find_word_complete(grid, word)
 
 print("Matches found:")
 for m in matches:
-    r, c, direction, is_reverse = m
-    print(f"Start: ({r+1},{c+1}), Direction: {direction}, Reverse: {is_reverse}")
+    r, c, direction, is_reverse, mismatch_index = m
+    mismatch_info = f", Mismatch at position {mismatch_index+1}" if mismatch_index >= 0 else ""
+    print(f"Start: ({r+1},{c+1}), Direction: {direction}, Reverse: {is_reverse}{mismatch_info}")

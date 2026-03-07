@@ -60,12 +60,6 @@
       padding: 30px;
       margin-bottom: 25px;
       box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-    
-    .card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 15px 50px rgba(0,0,0,0.2);
     }
     
     p {
@@ -211,6 +205,14 @@
       box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4) !important;
       animation: pulse 1.5s ease-in-out infinite;
     }
+
+    .highlight-mismatch {
+      background: linear-gradient(135deg, #f87171 0%, #ef4444 100%) !important;
+      color: #fff;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4) !important;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
     
     @keyframes pulse {
       0%, 100% {
@@ -237,7 +239,7 @@
     #gridDisplay {
       display: flex;
       justify-content: center;
-      padding: 20px;
+      padding: 0 20px 20px 20px;
     }
     
     #segmentationResult {
@@ -295,6 +297,19 @@
       align-items: flex-start;
       flex-wrap: wrap;
       margin-top: 20px;
+    }
+
+    .search-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 12px 20px;
+      margin-bottom: 0;
+    }
+
+    .search-row input {
+      min-width: 200px;
     }
     
     .collapsible-header {
@@ -394,14 +409,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <h3>Search for a Word</h3>
-      <div class="search-section">
-        <input type="text" id="wordInput" placeholder="Enter word to search">
-        <button onclick="runSearch()">🔍 Search</button>
-      </div>
-    </div>
-
     <div id="segmentationResult" style="display:none;">
       <h2>Segmentation Result:</h2>
       <canvas id="outputCanvas"></canvas>
@@ -416,7 +423,10 @@
     </div>
 
     <div class="card">
-      <h2>Word Search Grid</h2>
+      <div class="search-row">
+        <input type="text" id="wordInput" placeholder="Enter word to search">
+        <button onclick="runSearch()">🔍 Search</button>
+      </div>
       <div id="gridDisplay"></div>
     </div>
 
@@ -501,14 +511,22 @@
       div.innerHTML = "";
       const table = document.createElement("table");
 
-      const highlightSet = new Set(highlights.map(h => h.r + "," + h.c));
+      const highlightType = {}; // "r,c" -> "match" | "mismatch"
+      for (const h of highlights) {
+        const key = h.r + "," + h.c;
+        if (h.mismatch) highlightType[key] = "mismatch";
+        else if (!highlightType[key]) highlightType[key] = "match";
+      }
 
       for (let r = 0; r < grid.length; r++) {
         const row = document.createElement("tr");
         for (let c = 0; c < grid[0].length; c++) {
           const cell = document.createElement("td");
           cell.textContent = grid[r][c];
-          if (highlightSet.has(r + "," + c)) {
+          const key = r + "," + c;
+          if (highlightType[key] === "mismatch") {
+            cell.classList.add("highlight-mismatch");
+          } else if (highlightType[key] === "match") {
             cell.classList.add("highlight");
           }
           row.appendChild(cell);
@@ -538,7 +556,7 @@
           for (let i=0; i<w.length; i++) {
             const r = m.row-1 + dr*i;
             const c = m.col-1 + dc*i;
-            highlights.push({r, c});
+            highlights.push({ r, c, mismatch: m.mismatchIndex >= 0 && i === m.mismatchIndex });
           }
         }
       }
@@ -560,21 +578,28 @@
       }
 
       function checkDirection(r, c, dr, dc, w) {
+        let mismatchIndex = -1;
         for (let i = 0; i < w.length; i++) {
           const nr = r + dr * i, nc = c + dc * i;
-          if (!inBounds(nr, nc) || grid[nr][nc] !== w[i]) return false;
+          const cell = inBounds(nr, nc) ? grid[nr][nc] : null;
+          if (cell === null) return { ok: false };
+          if (cell === w[i] || cell === " " || cell === "-") continue;
+          if (mismatchIndex >= 0) return { ok: false };
+          mismatchIndex = i;
         }
-        return true;
+        return { ok: true, mismatchIndex };
       }
 
       for (let r = 0; r < nRows; r++) {
         for (let c = 0; c < nCols; c++) {
           for (const [dr, dc, label] of directions) {
-            if (checkDirection(r, c, dr, dc, word)) {
-              matches.push({ row: r+1, col: c+1, dir: label, reversed: false });
+            let res = checkDirection(r, c, dr, dc, word);
+            if (res.ok) {
+              matches.push({ row: r+1, col: c+1, dir: label, reversed: false, mismatchIndex: res.mismatchIndex });
             }
-            if (checkDirection(r, c, dr, dc, word.split("").reverse().join(""))) {
-              matches.push({ row: r+1, col: c+1, dir: label, reversed: true });
+            res = checkDirection(r, c, dr, dc, word.split("").reverse().join(""));
+            if (res.ok) {
+              matches.push({ row: r+1, col: c+1, dir: label, reversed: true, mismatchIndex: res.mismatchIndex });
             }
           }
         }
