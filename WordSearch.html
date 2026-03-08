@@ -145,16 +145,7 @@
       box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
       letter-spacing: 0.5px;
     }
-    
-    button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-    }
-    
-    button:active {
-      transform: translateY(0);
-    }
-    
+
     button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
@@ -564,16 +555,12 @@ IJKL
 
     function openClaudeScan() {
       const prompt = typeof CLAUDE_SCAN_PROMPT !== 'undefined' ? CLAUDE_SCAN_PROMPT : 'Extract the letter grid from the attached image. One row per line, no spaces between letters.';
-      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Claude – scan grid</title><body style="font-family:sans-serif;max-width:640px;margin:2em auto;padding:0 1em;">' +
-        '<h1>Scan with Claude</h1>' +
-        '<p>Copy the prompt below, then open <a href="https://claude.ai" target="_blank" rel="noopener">Claude</a>, paste it, and attach your grid image.</p>' +
-        '<label for="p">Prompt:</label><br>' +
-        '<textarea id="p" rows="12" style="width:100%;margin:8px 0;font-family:monospace;">' + prompt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea>' +
-        '<p><button onclick="navigator.clipboard.writeText(document.getElementById(\'p\').value)">Copy to clipboard</button></p>' +
-        '</body></html>';
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank', 'noopener');
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(prompt);
+        }
+      } catch (e) {}
+      window.open('https://claude.ai', '_blank', 'noopener');
     }
 
     // Play a cheerful ascending chord pattern when word is found
