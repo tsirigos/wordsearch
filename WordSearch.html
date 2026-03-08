@@ -347,6 +347,61 @@
     .collapsible-header.expanded .toggle-icon {
       transform: rotate(90deg);
     }
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 90;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .paste-grid-modal {
+      background: white;
+      border-radius: 20px;
+      padding: 24px;
+      max-width: 90vw;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+
+    .paste-grid-modal h3 {
+      margin: 0 0 8px 0;
+      color: #2d3748;
+    }
+
+    .paste-grid-modal .modal-hint {
+      color: #718096;
+      font-size: 0.9em;
+      margin-bottom: 12px;
+    }
+
+    .paste-grid-modal textarea {
+      width: 100%;
+      min-height: 200px;
+      padding: 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      font-family: monospace;
+      font-size: 14px;
+      resize: vertical;
+      margin-bottom: 16px;
+      box-sizing: border-box;
+    }
+
+    .paste-grid-modal .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
     
     @media (max-width: 768px) {
       h1 {
@@ -388,9 +443,8 @@
     <h1>Word Search Solver</h1>
 
     <div class="card">
-      <h3>Option 1: Paste Grid Text</h3>
-      <p>Paste your grid below (one row per line, no spaces).</p>
-      <textarea id="gridInput"></textarea>
+      <button type="button" onclick="openPasteGridModal()">Paste Grid Text</button>
+      <textarea id="gridInput" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;"></textarea>
     </div>
 
     <div class="card">
@@ -422,6 +476,18 @@
         <button id="confirmBtn" style="font-size: 1.5em; margin-left: 10px; vertical-align: middle;">✓</button>
     </div>
 
+    <div id="pasteGridModalOverlay" class="modal-overlay" onclick="if(event.target===this) closePasteGridModal()">
+      <div class="paste-grid-modal" onclick="event.stopPropagation()">
+        <h3>Paste Grid Text</h3>
+        <p class="modal-hint">One row per line, no spaces between letters.</p>
+        <textarea id="gridModalInput" placeholder="CSDJSOMALLEMYJDSCDZ&#10;MOEEIALGJTETCCEAHEY&#10;..."></textarea>
+        <div class="modal-actions">
+          <button type="button" onclick="closePasteGridModal()">Cancel</button>
+          <button type="button" onclick="savePasteGridModal()">Save</button>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="search-row">
         <input type="text" id="wordInput" placeholder="Enter word to search">
@@ -442,6 +508,33 @@
       const header = document.getElementById('option2Header');
       content.classList.toggle('expanded');
       header.classList.toggle('expanded');
+    }
+
+    function openPasteGridModal() {
+      document.getElementById('gridModalInput').value = document.getElementById('gridInput').value;
+      document.getElementById('pasteGridModalOverlay').classList.add('open');
+      document.addEventListener('keydown', pasteModalEscape);
+    }
+
+    function closePasteGridModal() {
+      document.getElementById('pasteGridModalOverlay').classList.remove('open');
+      document.removeEventListener('keydown', pasteModalEscape);
+    }
+
+    function pasteModalEscape(e) {
+      if (e.key === 'Escape') closePasteGridModal();
+    }
+
+    function savePasteGridModal() {
+      const raw = document.getElementById('gridModalInput').value.trim();
+      document.getElementById('gridInput').value = raw;
+      closePasteGridModal();
+      if (raw) {
+        const grid = raw.split("\n").map(r => r.trim().toUpperCase()).filter(r => r.length > 0);
+        if (grid.length > 0) displayGrid(grid);
+      } else {
+        document.getElementById('gridDisplay').innerHTML = '';
+      }
     }
 
     // Play a cheerful ascending chord pattern when word is found
