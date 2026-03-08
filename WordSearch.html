@@ -61,6 +61,10 @@
       margin-bottom: 25px;
       box-shadow: 0 10px 40px rgba(0,0,0,0.15);
     }
+
+    .card.hidden {
+      display: none !important;
+    }
     
     p {
       color: #718096;
@@ -402,6 +406,12 @@
       gap: 10px;
       justify-content: flex-end;
     }
+
+    .card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
     
     @media (max-width: 768px) {
       h1 {
@@ -443,11 +453,14 @@
     <h1>Word Search Solver</h1>
 
     <div class="card">
-      <button type="button" onclick="openPasteGridModal()">Paste Grid Text</button>
+      <div class="card-actions">
+        <button type="button" onclick="openPasteGridModal()">Paste Grid Text</button>
+        <button type="button" onclick="openClaudeScan()">Scan with Claude</button>
+      </div>
       <textarea id="gridInput" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;"></textarea>
     </div>
 
-    <div class="card">
+    <div class="card hidden" id="option2Card">
       <h3 class="collapsible-header" id="option2Header" onclick="toggleOption2()">
         Option 2: Upload Grid Image
         <span class="toggle-icon">▶</span>
@@ -503,6 +516,18 @@
   </div>
 
   <script>
+    // ---------------------------------------------------------------------------
+    // Prompt for Claude to extract a letter grid from an image. Edit as needed.
+    // Used by the "Scan with Claude" button (opens in new tab for copy/paste).
+    // ---------------------------------------------------------------------------
+    const CLAUDE_SCAN_PROMPT = `I am attaching an image of a word search puzzle grid in UPPERCASE letters. Please extract the letter grid and return it as plain text with exactly one row per line and no spaces between letters. Use the exact letters shown, always uppercase and with the accents removed. This is a difficult problem and I want you to first determine the font type which may help you more accurately identify the letters. Also, utilize OCR tools to perform this task accurately.
+
+Here is an example of the desired output:
+ABCD
+EFGH
+IJKL
+`;
+
     function toggleOption2() {
       const content = document.getElementById('option2Content');
       const header = document.getElementById('option2Header');
@@ -535,6 +560,20 @@
       } else {
         document.getElementById('gridDisplay').innerHTML = '';
       }
+    }
+
+    function openClaudeScan() {
+      const prompt = typeof CLAUDE_SCAN_PROMPT !== 'undefined' ? CLAUDE_SCAN_PROMPT : 'Extract the letter grid from the attached image. One row per line, no spaces between letters.';
+      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Claude – scan grid</title><body style="font-family:sans-serif;max-width:640px;margin:2em auto;padding:0 1em;">' +
+        '<h1>Scan with Claude</h1>' +
+        '<p>Copy the prompt below, then open <a href="https://claude.ai" target="_blank" rel="noopener">Claude</a>, paste it, and attach your grid image.</p>' +
+        '<label for="p">Prompt:</label><br>' +
+        '<textarea id="p" rows="12" style="width:100%;margin:8px 0;font-family:monospace;">' + prompt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea>' +
+        '<p><button onclick="navigator.clipboard.writeText(document.getElementById(\'p\').value)">Copy to clipboard</button></p>' +
+        '</body></html>';
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
     }
 
     // Play a cheerful ascending chord pattern when word is found
